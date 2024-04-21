@@ -6,14 +6,16 @@ import (
 	"net/http"
 	"os"
 
-	_ "github.com/joho/godotenv/autoload"
+	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	_ "github.com/lib/pq"
 )
 
 // type Taxes struct{
-// 	totalIncome float64 ``
+// 	totalIncome float64 `json:"totalIncome"`
+// 	wht float64 `json:"wht"`
+// 	allowances []
 // }
 
 var db *sql.DB
@@ -22,6 +24,11 @@ func main() {
 
 	// db connection
 	var err error
+
+	err = godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
 	psqlInfo := os.Getenv("DATABASE_URL")
 
