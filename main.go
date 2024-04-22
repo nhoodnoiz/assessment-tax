@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,13 +13,40 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// type Taxes struct{
-// 	totalIncome float64 `json:"totalIncome"`
-// 	wht float64 `json:"wht"`
-// 	allowances []
-// }
+type Allowance struct {
+	AllowanceType string  `json:"allowanceType"`
+	Amount        float64 `json:"amount"`
+}
+
+type IncomeData struct {
+	TotalIncome float64     `json:"totalIncome"`
+	Wht         float64     `json:"wht"`
+	Allowances  []Allowance `json:"allowances"`
+}
+
+type Tax struct {
+	Tax float64 `json:"tax"`
+}
+
+// Tax Level declaring
+
+type TaxLevel struct {
+	Level string  `json:"level"`
+	Tax   float64 `json:"tax"`
+}
+
+type TaxData struct {
+	Tax      float64    `json:"tax"`
+	TaxLevel []TaxLevel `json:"taxLevel"`
+}
 
 var db *sql.DB
+
+type Err struct {
+	Message string `json:"message"`
+}
+
+var personalDeduction float64 = 60000
 
 func main() {
 
@@ -83,7 +111,7 @@ func main() {
 	}))
 
 	e.GET("/health", healthHandler)
-	// e.GET("/users", getUsersHandler)
+	e.POST("/tax/calculations", getIncomeHandler)
 
 	// Start http server
 	port := os.Getenv("PORT")
@@ -94,6 +122,161 @@ func healthHandler(c echo.Context) error {
 	return c.String(http.StatusOK, "Hello, Go Bootcamp!")
 }
 
-// func getUsersHandler(c echo.Context) error {
+func getIncomeHandler(c echo.Context) error {
+
+	var incomeData IncomeData
+	// tax := new(Tax)
+	err := c.Bind(&incomeData)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+	if checkNegativeNumber(incomeData) {
+		return c.JSON(http.StatusBadRequest, "The input must be positive number")
+	}
+	donation, kReceipt := checkValue(incomeData)
+	response := calculateTax(incomeData, donation, kReceipt)
+	// if err != nil {
+	// 	return c.JSON(http.StatusBadRequest, Err{Message: err})
+	// }
+	// tx := Tax{}
+	// tx.Tax = t
+
+	return c.JSON(http.StatusCreated, response)
+}
+func checkNegativeNumber(data IncomeData) bool {
+	// check negative number
+	if data.TotalIncome < 0 {
+		return true
+	}
+	if data.Wht < 0 {
+		return true
+	}
+	for _, value := range data.Allowances {
+		if value.Amount < 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func checkValue(data IncomeData) (donation, kReceipt float64) {
+
+	for _, value := range data.Allowances {
+
+		// check donation value
+		if value.AllowanceType == "donation" {
+			if value.Amount <= 100000 {
+				donation = value.Amount
+			} else if value.Amount > 100000 {
+				donation = 100000
+			}
+		} else if value.AllowanceType == "k-receipt" {
+			if value.Amount <= 50000 && value.Amount > 0 {
+				kReceipt = value.Amount
+			} else if value.Amount > 50000 {
+				kReceipt = 50000
+			}
+		}
+	}
+	return donation, kReceipt
+
+}
+
+func calculateTax(data IncomeData, donation, kReceipt float64) (re TaxData) {
+
+	// for _, t := range data.Allowances {
+	// 	if t.AllowanceType == "donation" {
+	// 		if t.Amount <= 100000 {
+	// 			donation = t.Amount
+	// 		} else if t.Amount > 100000 {
+	// 			donation = 100000
+	// 		}
+	// 	}
+	// 	if t.AllowanceType == "k-receipt" {
+
+	// 		if t.Amount > 0 && t.Amount <= 50000 {
+	// 			kReceipt = t.Amount
+	// 		}
+	// 	}
+	// }
+
+	var tax float64
+
+	tax = data.TotalIncome - personalDeduction - donation - kReceipt
+
+	fmt.Printf("totalincome = %v,personalDeduction = %v, donation = %v, kReceipt = %v\n", data.TotalIncome, personalDeduction, donation, kReceipt)
+
+	txLevel := 0
+	if tax > 2000000 {
+		tax = tax - 2000000
+		tax = 0.35 * tax
+		tax = tax + (1000000 * 0.2) + (500000 * 0.15) + (350000 * 0.1)
+		txLevel = 4
+		fmt.Println("lv4")
+	} else if tax > 1000000 && tax <= 2000000 {
+		tax = tax - 1000000
+		tax = 0.2 * tax
+		tax = tax + (500000 * 0.15) + (350000 * 0.1)
+		txLevel = 3
+		fmt.Println("lv3")
+	} else if tax > 500000 && tax <= 1000000 {
+		tax = tax - 500000
+		tax = 0.15 * tax
+		tax = tax + (350000 * 0.1)
+		txLevel = 2
+		fmt.Println("lv2")
+	} else if tax > 150000 && tax <= 500000 {
+		tax = tax - 150000
+		tax = 0.1 * tax
+		txLevel = 1
+		fmt.Println("lv1")
+	} else {
+		tax = 0
+		txLevel = 0
+	}
+
+	tax = tax - data.Wht
+	fmt.Println("tax =", tax)
+	fmt.Println("wht =", data.Wht)
+
+	response := TaxData{
+		Tax: tax,
+		TaxLevel: []TaxLevel{
+
+			{
+				Level: "0-150,000",
+				Tax:   0.0,
+			},
+			{
+				Level: "150,001-500,000",
+				Tax:   0.0,
+			},
+			{
+				Level: "500,001-1,000,000",
+				Tax:   0.0,
+			},
+			{
+				Level: "1,000,001-2,000,000",
+				Tax:   0.0,
+			},
+			{
+				Level: "2,000,001 ขึ้นไป",
+				Tax:   0.0,
+			},
+		},
+	}
+
+	response.TaxLevel[txLevel].Tax = tax
+
+	return response
+
+}
+
+// func calculateTax(data IncomeData) []float64 {
+// 	var results []float64
+// 	for _, allowance := range data.Allowances {
+// 		results = append(results, allowance.Amount)
+// 	}
+// 	return results
 
 // }
