@@ -28,6 +28,11 @@ type Tax struct {
 	Tax float64 `json:"tax"`
 }
 
+type TaxRefund struct {
+	Tax       float64 `json:"tax"`
+	TaxRefund float64 `json:"taxRefund"`
+}
+
 // Tax Level declaring
 
 type TaxLevel struct {
@@ -52,16 +57,20 @@ type KReceipt struct {
 	KReceipt float64 `json:"kReceipt"`
 }
 
+// starting value for personalDeduction = 60000
+var personalDeduction float64 = 60000
+
+var donation float64
+var kReceipt float64
+
+// starting value for kReceiptRange = 50000
+var kReceiptRange float64 = 50000
+
 var db *sql.DB
 
 type Err struct {
 	Message string `json:"message"`
 }
-
-var personalDeduction float64 = 60000
-
-var donation float64
-var kReceipt float64
 
 func main() {
 
@@ -128,7 +137,7 @@ func main() {
 	e.GET("/health", healthHandler)
 	e.POST("/tax/calculations", getTaxHandler)
 	e.POST("/admin/deductions/personal", setPersonaldeductionHandler)
-	// e.POST("/admin/deductions/k-receipt", setKreceiptHandler)
+	e.POST("/admin/deductions/k-receipt", setKreceiptHandler)
 
 	// Start http server
 	port := os.Getenv("PORT")
@@ -153,16 +162,31 @@ func getTaxHandler(c echo.Context) error {
 	donation, kReceipt = checkValue(incomeData)
 
 	// implement story: EXP04 and EXP07; provide the tax level detail
-	_, response := calculateTax(incomeData, donation, kReceipt)
+	_, response, responseRefund := calculateTax(incomeData, donation, kReceipt)
+
+	// fmt.Println("(From calculateTax)tx =", tx)
+
+	// fmt.Println("tax =", tax)
+	// fmt.Println("taxRefund =", taxRefund)
 	// if err != nil {
 	// 	return c.JSON(http.StatusBadRequest, Err{Message: err})
 	// }
 
-	// implement story: EXP01; not provide the tax level detail
-	// tx := Tax{}
-	// tx.Tax = t
+	// implement story: EXP01,EXP02,EXP03; not provide the tax level detail
 
-	return c.JSON(http.StatusCreated, response)
+	// if responseRefund.TaxRefund != 0 {
+	// 	return c.JSON(http.StatusCreated, responseRefund)
+	// } else {
+	// 	return c.JSON(http.StatusCreated, tx)
+	// }
+
+	// implement story: EXP04,EXP07; provide the tax level detail
+
+	if responseRefund.TaxRefund != 0 {
+		return c.JSON(http.StatusCreated, responseRefund)
+	} else {
+		return c.JSON(http.StatusCreated, response)
+	}
 }
 func checkNegativeNumber(data IncomeData) bool {
 	// check negative number
@@ -195,10 +219,10 @@ func checkValue(data IncomeData) (donation, kReceipt float64) {
 			}
 		} else if value.AllowanceType == "k-receipt" {
 
-			if value.Amount <= 50000 && value.Amount > 0 {
+			if value.Amount <= kReceiptRange && value.Amount > 0 {
 				kReceipt = value.Amount
-			} else if value.Amount > 50000 {
-				kReceipt = 50000
+			} else if value.Amount > kReceiptRange {
+				kReceipt = kReceiptRange
 			}
 		}
 	}
@@ -206,7 +230,7 @@ func checkValue(data IncomeData) (donation, kReceipt float64) {
 
 }
 
-func calculateTax(data IncomeData, donation, kReceipt float64) (tax float64, response TaxData) {
+func calculateTax(data IncomeData, donation, kReceipt float64) (tx Tax, response TaxData, responseRefund TaxRefund) {
 
 	// for _, t := range data.Allowances {
 	// 	if t.AllowanceType == "donation" {
@@ -224,7 +248,7 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tax float64, res
 	// 	}
 	// }
 
-	// var tax float64
+	var tax float64
 
 	tax = data.TotalIncome - personalDeduction - donation - kReceipt
 
@@ -258,44 +282,64 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tax float64, res
 		txLevel = 0
 	}
 	tax = tax - data.Wht
+
+	// in case when there's tax refund
+	var taxRefund float64
+
 	if tax < 0 {
+		taxRefund = (-1) * tax
 		tax = 0
+		fmt.Println("taxRefund =", taxRefund)
+	} else {
+		tx = Tax{Tax: tax}
+		// fmt.Println("tx =", tx)
 	}
+	// fmt.Println("(outside if-else)tx =", tx)
+
 	fmt.Println("tax =", tax)
 	fmt.Println("wht =", data.Wht)
 	fmt.Println("tax level =", txLevel)
 	fmt.Println("<<<<<End of Request>>>>>")
 
-	response = TaxData{
-		Tax: tax,
-		TaxLevel: []TaxLevel{
+	if taxRefund != 0 {
 
-			{
-				Level: "0-150,000",
-				Tax:   0.0,
+		responseRefund = TaxRefund{
+			Tax:       tax,
+			TaxRefund: taxRefund,
+		}
+	} else {
+		// with tax level detail
+		response = TaxData{
+			Tax: tax,
+			TaxLevel: []TaxLevel{
+
+				{
+					Level: "0-150,000",
+					Tax:   0.0,
+				},
+				{
+					Level: "150,001-500,000",
+					Tax:   0.0,
+				},
+				{
+					Level: "500,001-1,000,000",
+					Tax:   0.0,
+				},
+				{
+					Level: "1,000,001-2,000,000",
+					Tax:   0.0,
+				},
+				{
+					Level: "2,000,001 ขึ้นไป",
+					Tax:   0.0,
+				},
 			},
-			{
-				Level: "150,001-500,000",
-				Tax:   0.0,
-			},
-			{
-				Level: "500,001-1,000,000",
-				Tax:   0.0,
-			},
-			{
-				Level: "1,000,001-2,000,000",
-				Tax:   0.0,
-			},
-			{
-				Level: "2,000,001 ขึ้นไป",
-				Tax:   0.0,
-			},
-		},
+		}
+
+		response.TaxLevel[txLevel].Tax = tax
 	}
 
-	response.TaxLevel[txLevel].Tax = tax
-
-	return tax, response
+	return tx, response, responseRefund
 
 }
 
@@ -324,30 +368,31 @@ func setPersonaldeductionHandler(c echo.Context) error {
 		personal.PersonalDeduction = personalDeduction
 
 		return c.JSON(http.StatusCreated, personal)
+
 	} else {
 		return c.JSON(http.StatusBadRequest, "Personal deduction must be in range between 10,000 - 100,000")
 	}
 
 }
 
-// func setKreceiptHandler(c echo.Context) error {
+func setKreceiptHandler(c echo.Context) error {
 
-// 	var amount Amount
-// 	err := c.Bind(&amount)
-// 	if err != nil {
-// 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
-// 	}
+	var amount Amount
+	err := c.Bind(&amount)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
 
-// 	if amount.Amount > 0 && amount.Amount <= 100000 {
+	if amount.Amount > 0 && amount.Amount <= 100000 {
 
-// 		kReceipt = amount.Amount
+		kReceiptRange = amount.Amount
 
-// 		var receipt KReceipt
-// 		receipt.KReceipt = kReceipt
+		var receipt KReceipt
+		receipt.KReceipt = kReceiptRange
 
-// 		return c.JSON(http.StatusCreated, receipt)
-// 	} else {
-// 		return c.JSON(http.StatusBadRequest, "k-receipt must be in range between 0 - 100,000")
-// 	}
+		return c.JSON(http.StatusCreated, receipt)
+	} else {
+		return c.JSON(http.StatusBadRequest, "k-receipt must be in range between 0 - 100,000")
+	}
 
-// }
+}
