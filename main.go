@@ -245,6 +245,7 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tax float64) {
 	if tax < 0 {
 		tax = 0
 	}
+	fmt.Println("Story: EXP02 - feature/story-2")
 	fmt.Println("tax =", tax)
 	fmt.Println("wht =", data.Wht)
 	fmt.Println("tax level =", txLevel)
