@@ -2,10 +2,12 @@ package main
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
@@ -32,6 +34,29 @@ type TaxRefund struct {
 	Tax       float64 `json:"tax"`
 	TaxRefund float64 `json:"taxRefund"`
 }
+
+// Response body CSV - EXP06
+// type Taxes struct {
+// 	TotalIncome float64 `json:"totalIncome"`
+// 	TaxDetails  []Tax
+// 	TaxRefunds  []TaxRefund
+// }
+
+type Taxes struct {
+	Taxes []TaxesAll `json:"taxes"`
+}
+
+type TaxesAll struct {
+	TotalIncome float64 `json:"totalIncome"`
+	Tax         float64 `json:"tax"`
+	TaxRefund   float64 `json:"taxRefund"`
+}
+
+// type TaxesAll struct {
+// 	TotalIncome float64     `json:"totalIncome"`
+// 	Tax         []Tax       `json:"tax"`
+// 	TaxRefund   []TaxRefund `json:"taxRefund"`
+// }
 
 // Tax Level declaring
 
@@ -138,6 +163,7 @@ func main() {
 	e.POST("/tax/calculations", getTaxHandler)
 	e.POST("/admin/deductions/personal", setPersonaldeductionHandler)
 	e.POST("/admin/deductions/k-receipt", setKreceiptHandler)
+	e.POST("/tax/calculations/upload-csv", uploadCsvHandler)
 
 	// Start http server
 	port := os.Getenv("PORT")
@@ -394,5 +420,125 @@ func setKreceiptHandler(c echo.Context) error {
 	} else {
 		return c.JSON(http.StatusBadRequest, "k-receipt must be in range between 0 - 100,000")
 	}
+
+}
+
+func uploadCsvHandler(c echo.Context) error {
+	// file, err := c.FormFile("taxes.csv")
+
+	taxesSlice := getTaxesCsv()
+
+	return c.JSON(http.StatusCreated, taxesSlice)
+}
+
+func getTaxesCsv() Taxes {
+	file, err := os.Open("taxes.csv")
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		// return
+	}
+	defer file.Close()
+
+	// Parse the file
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		fmt.Println("Error reading CSV:", err)
+		// return
+	}
+
+	// Slice to hold parsed records
+	var incomeDataSlice []IncomeData
+
+	// Iterate over each record
+	for _, row := range records {
+		// Convert string fields to integers
+		totalIncome, err := strconv.ParseFloat(row[0], 64)
+		if err != nil {
+			fmt.Println("Error converting totalIncome:", err)
+			// return
+		}
+		wht, err := strconv.ParseFloat(row[1], 64)
+		if err != nil {
+			fmt.Println("Error converting wht:", err)
+			// return
+		}
+		donation, err := strconv.ParseFloat(row[2], 64)
+		if err != nil {
+			fmt.Println("Error converting donation:", err)
+			// return
+		}
+
+		// create a new record and append to parsedRecords
+		// taxes := TaxesCSV{
+		// 	TotalIncome: totalIncome,
+		// 	Wht:         wht,
+		// 	Donation:    donation,
+		// }
+		income := IncomeData{
+			TotalIncome: totalIncome,
+			Wht:         wht,
+		}
+		income.Allowances = append(income.Allowances, Allowance{
+			AllowanceType: "donation",
+			Amount:        donation,
+		})
+
+		// Append to the slice
+		incomeDataSlice = append(incomeDataSlice, income)
+	}
+	// skip the header row
+	incomeDataSlice = incomeDataSlice[1:]
+
+	// var taxes Taxes
+	var taxesSlice Taxes
+	for _, data := range incomeDataSlice {
+
+		var taxes TaxesAll
+
+		if checkNegativeNumber(data) {
+			fmt.Println("The input must be positive number")
+		}
+		donation, kReceipt = checkValue(data)
+
+		// implement story: EXP04 and EXP07; provide the tax level detail
+		tx, _, responseRefund := calculateTax(data, donation, kReceipt)
+
+		// if responseRefund.TaxRefund != 0 {
+		// 	taxes.TotalIncome = data.TotalIncome
+		// 	taxes.TaxRefunds = append(taxes.TaxRefunds, responseRefund)
+		// 	taxesSlice = append(taxesSlice, taxes)
+
+		// } else {
+		// 	taxes.TotalIncome = data.TotalIncome
+		// 	taxes.TaxDetails = append(taxes.TaxDetails, tx)
+		// 	taxesSlice = append(taxesSlice, taxes)
+		// }
+
+		if responseRefund.TaxRefund != 0 {
+			taxes = TaxesAll{TotalIncome: data.TotalIncome, Tax: tx.Tax, TaxRefund: responseRefund.TaxRefund}
+
+			taxesSlice.Taxes = append(taxesSlice.Taxes, taxes)
+		} else {
+			taxes = TaxesAll{TotalIncome: data.TotalIncome, Tax: tx.Tax}
+
+			taxesSlice.Taxes = append(taxesSlice.Taxes, taxes)
+
+		}
+
+		// if responseRefund.TaxRefund != 0 {
+		// 	taxes = TaxesAll{TotalIncome: data.TotalIncome, TaxRefund: []TaxRefund{responseRefund}}
+
+		// 	taxesSlice.Taxes = append(taxesSlice.Taxes, taxes)
+		// } else {
+		// 	taxes = TaxesAll{TotalIncome: data.TotalIncome, Tax: []Tax{tx}}
+
+		// 	taxesSlice.Taxes = append(taxesSlice.Taxes, taxes)
+
+		// }
+
+	}
+	// fmt.Println(taxesSlice)
+	return taxesSlice
 
 }
