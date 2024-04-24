@@ -120,7 +120,6 @@ func main() {
 	if err != nil {
 		log.Fatal("Connect to database error ", err)
 	}
-
 	defer db.Close()
 
 	// Run only first time
@@ -190,7 +189,7 @@ func main() {
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
 
 	<-shutdown
-	fmt.Println("Server shutting down...")
+	fmt.Println("shutting down the server")
 
 	// Wait for interrupt signal or kill signal to gracefully shutdown the server with a timeout of 10 seconds
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -483,7 +482,7 @@ func getTaxesCsv() Taxes {
 
 	// Iterate over each record
 	for _, row := range records {
-		// Convert string fields to integers
+		// Convert string fields to float64
 		totalIncome, err := strconv.ParseFloat(row[0], 64)
 		if err != nil {
 			fmt.Println("Error converting totalIncome:", err)
