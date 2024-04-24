@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
@@ -116,6 +120,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Connect to database error ", err)
 	}
+
 	defer db.Close()
 
 	// Run only first time
@@ -147,27 +152,53 @@ func main() {
 	}
 
 	e := echo.New()
-	// e.GET("/health", healthHandler)
+	e.GET("/health", healthHandler)
+	e.POST("/tax/calculations", getTaxHandler)
+	e.POST("/tax/calculations/upload-csv", uploadCsvHandler)
+
+	g := e.Group("/admin")
 
 	adminUsername := os.Getenv("ADMIN_USERNAME")
 	adminPassword := os.Getenv("ADMIN_PASSWORD")
 
-	e.Use(middleware.BasicAuth(func(username, password string, c echo.Context) (bool, error) {
+	g.Use(middleware.BasicAuth(func(username, password string, c echo.Context) (bool, error) {
 		if username == adminUsername && password == adminPassword {
 			return true, nil
 		}
 		return false, nil
 	}))
 
-	e.GET("/health", healthHandler)
-	e.POST("/tax/calculations", getTaxHandler)
-	e.POST("/admin/deductions/personal", setPersonaldeductionHandler)
-	e.POST("/admin/deductions/k-receipt", setKreceiptHandler)
-	e.POST("/tax/calculations/upload-csv", uploadCsvHandler)
+	// e.GET("/health", healthHandler)
+	// e.POST("/tax/calculations", getTaxHandler)
+	g.POST("/deductions/personal", setPersonaldeductionHandler)
+	g.POST("/deductions/k-receipt", setKreceiptHandler)
+	// e.POST("/tax/calculations/upload-csv", uploadCsvHandler)
+
+	// Gracefully shutdown
 
 	// Start http server
 	port := os.Getenv("PORT")
-	e.Logger.Fatal(e.Start(":" + port))
+	// e.Logger.Fatal(e.Start(":" + port))
+
+	go func() {
+		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
+			e.Logger.Fatal("shutting down the server")
+		}
+	}()
+
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	<-shutdown
+	fmt.Println("Server shutting down...")
+
+	// Wait for interrupt signal or kill signal to gracefully shutdown the server with a timeout of 10 seconds
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := e.Shutdown(ctx); err != nil {
+		e.Logger.Fatal(err)
+	}
 }
 
 func healthHandler(c echo.Context) error {
