@@ -4,19 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"encoding/csv"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/go-playground/validator"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	_ "github.com/lib/pq"
+	"github.com/shopspring/decimal"
 )
 
 type Allowance struct {
@@ -25,7 +30,7 @@ type Allowance struct {
 }
 
 type IncomeData struct {
-	TotalIncome float64     `json:"totalIncome"`
+	TotalIncome float64     `json:"totalIncome" validate:"required"`
 	Wht         float64     `json:"wht"`
 	Allowances  []Allowance `json:"allowances"`
 }
@@ -101,6 +106,18 @@ type Err struct {
 	Message string `json:"message"`
 }
 
+// Validate JSON request
+type CustomValidator struct {
+	validator *validator.Validate
+}
+
+func (cv *CustomValidator) Validate(i interface{}) error {
+	if err := cv.validator.Struct(i); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	return nil
+}
+
 func main() {
 
 	// db connection
@@ -151,6 +168,7 @@ func main() {
 	}
 
 	e := echo.New()
+	e.Validator = &CustomValidator{validator: validator.New()}
 	e.GET("/health", healthHandler)
 	e.POST("/tax/calculations", getTaxHandler)
 	e.POST("/tax/calculations/upload-csv", uploadCsvHandler)
@@ -212,9 +230,19 @@ func getTaxHandler(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
 	}
-	if checkNegativeNumber(incomeData) {
-		return c.JSON(http.StatusBadRequest, "The input must be positive number")
+	// Validate JSON
+	if err = c.Validate(&incomeData); err != nil {
+		return err
 	}
+
+	value, err := checkNumber(incomeData)
+	if value {
+		return c.JSON(http.StatusBadRequest, Err{Message: "The input numbers must be all positive"})
+	}
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+
 	donation, kReceipt = checkValue(incomeData)
 
 	// implement story: EXP04 and EXP07; provide the tax level detail
@@ -244,20 +272,23 @@ func getTaxHandler(c echo.Context) error {
 		return c.JSON(http.StatusCreated, response)
 	}
 }
-func checkNegativeNumber(data IncomeData) bool {
+func checkNumber(data IncomeData) (bool, error) {
 	// check negative number
 	if data.TotalIncome < 0 {
-		return true
+		return true, nil
 	}
 	if data.Wht < 0 {
-		return true
+		return true, nil
 	}
 	for _, value := range data.Allowances {
 		if value.Amount < 0 {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	if data.Wht > data.TotalIncome {
+		return false, errors.New("(wht:with holding tax) must be less than the totalIncome")
+	}
+	return false, nil
 }
 
 func checkValue(data IncomeData) (donation, kReceipt float64) {
@@ -288,56 +319,110 @@ func checkValue(data IncomeData) (donation, kReceipt float64) {
 
 func calculateTax(data IncomeData, donation, kReceipt float64) (tx Tax, response TaxData, responseRefund TaxRefund) {
 
-	// for _, t := range data.Allowances {
-	// 	if t.AllowanceType == "donation" {
-	// 		if t.Amount <= 100000 {
-	// 			donation = t.Amount
-	// 		} else if t.Amount > 100000 {
-	// 			donation = 100000
-	// 		}
-	// 	}
-	// 	if t.AllowanceType == "k-receipt" {
-
-	// 		if t.Amount > 0 && t.Amount <= 50000 {
-	// 			kReceipt = t.Amount
-	// 		}
-	// 	}
-	// }
-
+	var taxDecimal decimal.Decimal
 	var tax float64
+
+	// tax = data.TotalIncome - personalDeduction - donation - kReceipt
+	// totalIncomeDecimal := decimal.NewFromFloat(data.TotalIncome)
+	// personalDeductionDecimal := decimal.NewFromFloat(personalDeduction)
+	// donationDecimal := decimal.NewFromFloat(donation)
+	// kReceiptDecimal := decimal.NewFromFloat(kReceipt)
+
+	// taxDecimal = totalIncomeDecimal.Sub(personalDeductionDecimal).Sub(donationDecimal).Sub(kReceiptDecimal)
+	// taxDecimal = taxDecimal.Sub(decimal.NewFromInt(2000000)).Mul(decimal.NewFromFloat(0.35)).Add(decimal.NewFromInt(200000 + 75000 + 35000)).Sub(decimal.NewFromFloat(data.Wht))
+
+	// fmt.Println("taxDecimal =", taxDecimal)
+
+	// tax = taxDecimal.InexactFloat64()
 
 	tax = data.TotalIncome - personalDeduction - donation - kReceipt
 
 	fmt.Printf("totalIncome = %v, personalDeduction = %v, donation = %v, kReceipt = %v\n", data.TotalIncome, personalDeduction, donation, kReceipt)
 
 	txLevel := 0
+	var txLv1 float64
+	var txLv2 float64
+	var txLv3 float64
+	var txLv4 float64
 	if tax > 2000000 {
-		tax = tax - 2000000
-		// fmt.Println("tax after =", tax)
-		tax = 0.35 * tax
-		// fmt.Println("tax afer multiply =", tax)
-		tax = tax + (1000000 * 0.2) + (500000 * 0.15) + (350000 * 0.1)
-		// fmt.Println("tax after include =", tax)
+		// tax = tax - 2000000
+		// tax = 0.35 * tax
+		// txLv4 = tax
+		// tax = tax + (1000000 * 0.2) + (500000 * 0.15) + (350000 * 0.1)
+		// txLevel = 4
+		// txLv1 = 35000
+		// txLv2 = 75000
+		// txLv3 = 200000
+
+		// convert to decimal.NewFromFloat
+		// var taxDecimal decimal.Decimal
+		taxDecimal = decimal.NewFromFloat(tax).Sub(decimal.NewFromInt(2000000))
+		taxDecimal = taxDecimal.Mul(decimal.NewFromFloat(0.35))
+		txLv4 = taxDecimal.InexactFloat64()
+		taxDecimal = taxDecimal.Add(decimal.NewFromInt(200000 + 75000 + 35000))
 		txLevel = 4
+		txLv1 = 35000
+		txLv2 = 75000
+		txLv3 = 200000
+		// tax = taxDecimal.InexactFloat64()
+		// fmt.Println("From taxDecimal to tax float64 =", tax)
+
 	} else if tax > 1000000 && tax <= 2000000 {
-		tax = tax - 1000000
-		tax = 0.2 * tax
-		tax = tax + (500000 * 0.15) + (350000 * 0.1)
+		// tax = tax - 1000000
+		// tax = 0.2 * tax
+		// txLv3 = tax
+		// tax = tax + (500000 * 0.15) + (350000 * 0.1)
+		// txLevel = 3
+		// txLv1 = 35000
+		// txLv2 = 75000
+
+		// convert to decimal.NewFromFloat
+		// var taxDecimal decimal.Decimal
+		taxDecimal = decimal.NewFromFloat(tax).Sub(decimal.NewFromInt(1000000))
+		taxDecimal = taxDecimal.Mul(decimal.NewFromFloat(0.2))
+		txLv4 = taxDecimal.InexactFloat64()
+		taxDecimal = taxDecimal.Add(decimal.NewFromInt(75000 + 35000))
 		txLevel = 3
+		txLv1 = 35000
+		txLv2 = 75000
+
 	} else if tax > 500000 && tax <= 1000000 {
-		tax = tax - 500000
-		tax = 0.15 * tax
-		tax = tax + (350000 * 0.1)
+		// tax = tax - 500000
+		// tax = 0.15 * tax
+		// txLv2 = tax
+		// tax = tax + (350000 * 0.1)
+		// txLevel = 2
+		// txLv1 = 35000
+
+		// convert to decimal.NewFromFloat
+		// var taxDecimal decimal.Decimal
+		taxDecimal = decimal.NewFromFloat(tax).Sub(decimal.NewFromInt(500000))
+		taxDecimal = taxDecimal.Mul(decimal.NewFromFloat(0.15))
+		txLv4 = taxDecimal.InexactFloat64()
+		taxDecimal = taxDecimal.Add(decimal.NewFromInt(35000))
 		txLevel = 2
+		txLv1 = 35000
+
 	} else if tax > 150000 && tax <= 500000 {
-		tax = tax - 150000
-		tax = 0.1 * tax
+		// tax = tax - 150000
+		// tax = 0.1 * tax
+		// txLv1 = tax
+		// txLevel = 1
+
+		// convert to decimal.NewFromFloat
+		// var taxDecimal decimal.Decimal
+		taxDecimal = decimal.NewFromFloat(tax).Sub(decimal.NewFromInt(150000))
+		taxDecimal = taxDecimal.Mul(decimal.NewFromFloat(0.1))
+		txLv4 = taxDecimal.InexactFloat64()
 		txLevel = 1
+
 	} else {
 		tax = 0
 		txLevel = 0
 	}
-	tax = tax - data.Wht
+	// tax = tax - data.Wht
+	taxDecimal = taxDecimal.Sub(decimal.NewFromFloat(data.Wht))
+	tax = taxDecimal.InexactFloat64()
 
 	// in case when there's tax refund
 	var taxRefund float64
@@ -375,24 +460,24 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tx Tax, response
 				},
 				{
 					Level: "150,001-500,000",
-					Tax:   0.0,
+					Tax:   txLv1,
 				},
 				{
 					Level: "500,001-1,000,000",
-					Tax:   0.0,
+					Tax:   txLv2,
 				},
 				{
 					Level: "1,000,001-2,000,000",
-					Tax:   0.0,
+					Tax:   txLv3,
 				},
 				{
 					Level: "2,000,001 ขึ้นไป",
-					Tax:   0.0,
+					Tax:   txLv4,
 				},
 			},
 		}
 
-		response.TaxLevel[txLevel].Tax = tax
+		// response.TaxLevel[txLevel].Tax = tax
 	}
 
 	return tx, response, responseRefund
@@ -454,28 +539,46 @@ func setKreceiptHandler(c echo.Context) error {
 }
 
 func uploadCsvHandler(c echo.Context) error {
-	// file, err := c.FormFile("taxes.csv")
+	file, err := c.FormFile("taxesFile")
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+	if !strings.HasSuffix(file.Filename, ".csv") {
+		return c.JSON(http.StatusBadRequest, "invalid file type, must be .csv")
+	}
+	csvFile, err := file.Open()
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+	defer csvFile.Close()
 
-	taxesSlice := getTaxesCsv()
+	taxesSlice, err := getTaxesCsv(csvFile)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
 
 	return c.JSON(http.StatusCreated, taxesSlice)
 }
 
-func getTaxesCsv() Taxes {
-	file, err := os.Open("taxes.csv")
-	if err != nil {
-		fmt.Println("Error opening file:", err)
-		// return
-	}
-	defer file.Close()
+func getTaxesCsv(file io.Reader) (Taxes, error) {
+	// file, err := os.Open("taxes.csv")
+	// if err != nil {
+	// 	fmt.Println("Error opening file:", err)
+	// 	// return
+	// }
+	// defer file.Close()
 
 	// Parse the file
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
 	if err != nil {
-		fmt.Println("Error reading CSV:", err)
-		// return
+		// fmt.Println("Error reading CSV:", err)
+		return Taxes{}, err
 	}
+
+	// skip the header row
+	header := records[:1]
+	records = records[1:]
 
 	// Slice to hold parsed records
 	var incomeDataSlice []IncomeData
@@ -486,17 +589,14 @@ func getTaxesCsv() Taxes {
 		totalIncome, err := strconv.ParseFloat(row[0], 64)
 		if err != nil {
 			fmt.Println("Error converting totalIncome:", err)
-			// return
 		}
 		wht, err := strconv.ParseFloat(row[1], 64)
 		if err != nil {
 			fmt.Println("Error converting wht:", err)
-			// return
 		}
 		donation, err := strconv.ParseFloat(row[2], 64)
 		if err != nil {
 			fmt.Println("Error converting donation:", err)
-			// return
 		}
 
 		// create a new record and append to parsedRecords
@@ -510,15 +610,13 @@ func getTaxesCsv() Taxes {
 			Wht:         wht,
 		}
 		income.Allowances = append(income.Allowances, Allowance{
-			AllowanceType: "donation",
+			AllowanceType: header[0][2],
 			Amount:        donation,
 		})
 
 		// Append to the slice
 		incomeDataSlice = append(incomeDataSlice, income)
 	}
-	// skip the header row
-	incomeDataSlice = incomeDataSlice[1:]
 
 	// var taxes Taxes
 	var taxesSlice Taxes
@@ -526,9 +624,14 @@ func getTaxesCsv() Taxes {
 
 		var taxes TaxesAll
 
-		if checkNegativeNumber(data) {
-			fmt.Println("The input must be positive number")
+		value, err := checkNumber(data)
+		if value {
+			return Taxes{}, errors.New("the input numbers in .csv file must be all positive")
 		}
+		if err != nil {
+			return Taxes{}, err
+		}
+
 		donation, kReceipt = checkValue(data)
 
 		// implement story: EXP04 and EXP07; provide the tax level detail
@@ -568,7 +671,6 @@ func getTaxesCsv() Taxes {
 		// }
 
 	}
-	// fmt.Println(taxesSlice)
-	return taxesSlice
+	return taxesSlice, nil
 
 }
