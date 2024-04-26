@@ -405,3 +405,97 @@ func TestCalculateTaxResponse(t *testing.T) {
 	}
 
 }
+
+func TestCalculateTaxResponseRefund(t *testing.T) {
+	testCases := []struct {
+		name          string
+		totalIncome   float64
+		wht           float64
+		donation      float64
+		kReceipt      float64
+		wantTaxRefund TaxRefund
+	}{
+		{"Story EXP01", 500000, 30000, 0, 0, TaxRefund{Tax: 0, TaxRefund: 1000}},
+		{"Story EXP02", 500000, 31000, 0, 0, TaxRefund{Tax: 0, TaxRefund: 2000}},
+		{"Story EXP03", 500000, 22000, 200000, 0, TaxRefund{Tax: 0, TaxRefund: 3000}},
+		{"Story EXP07", 500000, 19000, 100000, 200000, TaxRefund{Tax: 0, TaxRefund: 5000}},
+		{"1-Cases", 2160001, 310001.35, 200000, 0, TaxRefund{Tax: 0, TaxRefund: 1}},
+		{"2-Cases", 660000, 30500, 100000, 200000, TaxRefund{Tax: 0, TaxRefund: 500}},
+		{"3-Cases", 600000, 40000, 20000, 0, TaxRefund{Tax: 0, TaxRefund: 2000}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resultDonation, resultKReceipt := checkValue(IncomeData{
+				TotalIncome: tc.totalIncome,
+				Wht:         tc.wht,
+				Allowances: []Allowance{
+					{AllowanceType: "donation", Amount: tc.donation},
+					{AllowanceType: "k-receipt", Amount: tc.kReceipt},
+				},
+			})
+			_, _, resultResponseRefund := calculateTax(IncomeData{
+				TotalIncome: tc.totalIncome,
+				Wht:         tc.wht,
+				Allowances: []Allowance{
+					{AllowanceType: "donation", Amount: tc.donation},
+					{AllowanceType: "k-receipt", Amount: tc.kReceipt},
+				},
+			}, resultDonation, resultKReceipt)
+
+			if !reflect.DeepEqual(resultResponseRefund, tc.wantTaxRefund) {
+				t.Errorf("resultResponse = %v; want = %v", resultResponseRefund, tc.wantTaxRefund)
+			}
+
+		})
+	}
+
+}
+
+// func TestsetPersonaldeduction(t *testing.T) {
+// testCases := []struct {
+// 	name	string
+// 	amount	Amount
+// 	wantError error
+
+// }{
+// 	{"set personalDeduction to 70,000", 70000, },
+// Tax{Tax: 28000}, 70000, PersonalDeduction{PersonalDeduction: 70000}},
+// {"Story EXP02", 500000, 25000, 0, 0, Tax{Tax: 4000}},
+// {"Story EXP03", 500000, 0, 200000, 0, Tax{Tax: 19000}},
+// {"Story EXP07", 500000, 0, 100000, 200000, Tax{Tax: 14000}},
+// {"1-Cases", 2160001, 200000.35, 200000, 0, Tax{Tax: 110000}},
+// {"2-Cases", 660000, 0, 100000, 200000, Tax{Tax: 30000}},
+// {"3-Cases", 600000, 36000, 20000, 0, Tax{Tax: 2000}},
+// }
+
+// for _, tc := range testCases {
+// 	t.Run(tc.name, func(t *testing.T) {
+// 		err := setPersonaldeductionHandler(c ec
+// 	}
+
+// 		if resultTx != tc.wantTax {
+// 			t.Errorf("resultTx = %v; want = %v", resultTx, tc.wantTax)
+// 		}
+
+// 	})
+// }
+// 	var (
+// 		mockDB = *Amount{
+// 			"amount": &Amount{Amount: 70000},
+// 		}
+// 		personalDeductionJson = `{"amount": 70000}`
+// 	)
+// 	e := echo.New()
+// 	req := httptest.NewRequest(http.MethodPost,"/", strings.NewReader(personalDeductionJson))
+
+// 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+// 	rec := httptest.NewRecorder()
+// 	c := e.NewContext(req, rec)
+// 	req.Header.Set(HeaderContentType, MIMEApplicationForm)
+// 	err := c.Bind(&[]struct{})
+
+// 	if
+
+// }
