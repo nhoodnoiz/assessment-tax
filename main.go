@@ -237,7 +237,7 @@ func getTaxHandler(c echo.Context) error {
 
 	value, err := checkNumber(incomeData)
 	if value {
-		return c.JSON(http.StatusBadRequest, Err{Message: "The input numbers must be all positive"})
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
 	}
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
@@ -275,14 +275,14 @@ func getTaxHandler(c echo.Context) error {
 func checkNumber(data IncomeData) (bool, error) {
 	// check negative number
 	if data.TotalIncome < 0 {
-		return true, nil
+		return true, errors.New("totalIncome must be positive")
 	}
 	if data.Wht < 0 {
-		return true, nil
+		return true, errors.New("wht must be positive")
 	}
 	for _, value := range data.Allowances {
 		if value.Amount < 0 {
-			return true, nil
+			return true, errors.New("input number must be positive")
 		}
 	}
 	if data.Wht > data.TotalIncome {
@@ -380,7 +380,7 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tx Tax, response
 		// var taxDecimal decimal.Decimal
 		taxDecimal = decimal.NewFromFloat(tax).Sub(decimal.NewFromInt(1000000))
 		taxDecimal = taxDecimal.Mul(decimal.NewFromFloat(0.2))
-		txLv4 = taxDecimal.InexactFloat64()
+		txLv3 = taxDecimal.InexactFloat64()
 		taxDecimal = taxDecimal.Add(decimal.NewFromInt(75000 + 35000))
 		txLevel = 3
 		txLv1 = 35000
@@ -398,7 +398,7 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tx Tax, response
 		// var taxDecimal decimal.Decimal
 		taxDecimal = decimal.NewFromFloat(tax).Sub(decimal.NewFromInt(500000))
 		taxDecimal = taxDecimal.Mul(decimal.NewFromFloat(0.15))
-		txLv4 = taxDecimal.InexactFloat64()
+		txLv2 = taxDecimal.InexactFloat64()
 		taxDecimal = taxDecimal.Add(decimal.NewFromInt(35000))
 		txLevel = 2
 		txLv1 = 35000
@@ -413,7 +413,7 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tx Tax, response
 		// var taxDecimal decimal.Decimal
 		taxDecimal = decimal.NewFromFloat(tax).Sub(decimal.NewFromInt(150000))
 		taxDecimal = taxDecimal.Mul(decimal.NewFromFloat(0.1))
-		txLv4 = taxDecimal.InexactFloat64()
+		txLv1 = taxDecimal.InexactFloat64()
 		txLevel = 1
 
 	} else {
