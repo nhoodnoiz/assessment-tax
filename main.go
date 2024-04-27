@@ -435,7 +435,6 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tx Tax, response
 		tx = Tax{Tax: tax}
 		// fmt.Println("tx =", tx)
 	}
-	// fmt.Println("(outside if-else)tx =", tx)
 
 	fmt.Println("tax =", tax)
 	fmt.Println("wht =", data.Wht)
@@ -483,15 +482,6 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tx Tax, response
 	return tx, response, responseRefund
 
 }
-
-// func calculateTax(data IncomeData) []float64 {
-// 	var results []float64
-// 	for _, allowance := range data.Allowances {
-// 		results = append(results, allowance.Amount)
-// 	}
-// 	return results
-
-// }
 
 func setPersonaldeductionHandler(c echo.Context) error {
 
