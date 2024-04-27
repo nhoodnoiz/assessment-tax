@@ -451,27 +451,3 @@ func TestCalculateTaxResponseRefund(t *testing.T) {
 	}
 
 }
-
-// func TestSetPersonaldeduction(t *testing.T) {
-
-// 	t.Run("Change personalDeduction", func(t *testing.T) {
-
-// 		userJSON := `{"amount": 700000}`
-
-// 		e := echo.New()
-
-// 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(userJSON))
-// 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-// 		rec := httptest.NewRecorder()
-
-// 		c := e.NewContext(req, rec)
-// 		h := &Amount{Amount: 70000}
-
-// 		err := setPersonaldeductionHandler(c)
-
-// 		if err == nil {
-// 			t.Errorf("Result %v; want %v", err, nil)
-// 		}
-// 	})
-
-// }

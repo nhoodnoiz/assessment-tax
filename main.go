@@ -44,13 +44,6 @@ type TaxRefund struct {
 	TaxRefund float64 `json:"taxRefund"`
 }
 
-// Response body CSV - EXP06
-// type Taxes struct {
-// 	TotalIncome float64 `json:"totalIncome"`
-// 	TaxDetails  []Tax
-// 	TaxRefunds  []TaxRefund
-// }
-
 type Taxes struct {
 	Taxes []TaxesAll `json:"taxes"`
 }
@@ -60,12 +53,6 @@ type TaxesAll struct {
 	Tax         float64 `json:"tax"`
 	TaxRefund   float64 `json:"taxRefund"`
 }
-
-// type TaxesAll struct {
-// 	TotalIncome float64     `json:"totalIncome"`
-// 	Tax         []Tax       `json:"tax"`
-// 	TaxRefund   []TaxRefund `json:"taxRefund"`
-// }
 
 // Tax Level declaring
 
@@ -185,17 +172,13 @@ func main() {
 		return false, nil
 	}))
 
-	// e.GET("/health", healthHandler)
-	// e.POST("/tax/calculations", getTaxHandler)
 	g.POST("/deductions/personal", setPersonaldeductionHandler)
 	g.POST("/deductions/k-receipt", setKreceiptHandler)
-	// e.POST("/tax/calculations/upload-csv", uploadCsvHandler)
 
 	// Gracefully shutdown
 
 	// Start http server
 	port := os.Getenv("PORT")
-	// e.Logger.Fatal(e.Start(":" + port))
 
 	go func() {
 		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
@@ -225,7 +208,6 @@ func healthHandler(c echo.Context) error {
 func getTaxHandler(c echo.Context) error {
 
 	var incomeData IncomeData
-	// tax := new(Tax)
 	err := c.Bind(&incomeData)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
@@ -247,14 +229,6 @@ func getTaxHandler(c echo.Context) error {
 
 	// implement story: EXP04 and EXP07; provide the tax level detail
 	_, response, responseRefund := calculateTax(incomeData, donation, kReceipt)
-
-	// fmt.Println("(From calculateTax)tx =", tx)
-
-	// fmt.Println("tax =", tax)
-	// fmt.Println("taxRefund =", taxRefund)
-	// if err != nil {
-	// 	return c.JSON(http.StatusBadRequest, Err{Message: err})
-	// }
 
 	// implement story: EXP01,EXP02,EXP03; not provide the tax level detail
 
@@ -433,7 +407,6 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tx Tax, response
 		fmt.Println("taxRefund =", taxRefund)
 	} else {
 		tx = Tax{Tax: tax}
-		// fmt.Println("tx =", tx)
 	}
 
 	fmt.Println("tax =", tax)
@@ -551,18 +524,11 @@ func uploadCsvHandler(c echo.Context) error {
 }
 
 func getTaxesCsv(file io.Reader) (Taxes, error) {
-	// file, err := os.Open("taxes.csv")
-	// if err != nil {
-	// 	fmt.Println("Error opening file:", err)
-	// 	// return
-	// }
-	// defer file.Close()
 
 	// Parse the file
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
 	if err != nil {
-		// fmt.Println("Error reading CSV:", err)
 		return Taxes{}, err
 	}
 
@@ -589,12 +555,6 @@ func getTaxesCsv(file io.Reader) (Taxes, error) {
 			fmt.Println("Error converting donation:", err)
 		}
 
-		// create a new record and append to parsedRecords
-		// taxes := TaxesCSV{
-		// 	TotalIncome: totalIncome,
-		// 	Wht:         wht,
-		// 	Donation:    donation,
-		// }
 		income := IncomeData{
 			TotalIncome: totalIncome,
 			Wht:         wht,
@@ -627,17 +587,6 @@ func getTaxesCsv(file io.Reader) (Taxes, error) {
 		// implement story: EXP04 and EXP07; provide the tax level detail
 		tx, _, responseRefund := calculateTax(data, donation, kReceipt)
 
-		// if responseRefund.TaxRefund != 0 {
-		// 	taxes.TotalIncome = data.TotalIncome
-		// 	taxes.TaxRefunds = append(taxes.TaxRefunds, responseRefund)
-		// 	taxesSlice = append(taxesSlice, taxes)
-
-		// } else {
-		// 	taxes.TotalIncome = data.TotalIncome
-		// 	taxes.TaxDetails = append(taxes.TaxDetails, tx)
-		// 	taxesSlice = append(taxesSlice, taxes)
-		// }
-
 		if responseRefund.TaxRefund != 0 {
 			taxes = TaxesAll{TotalIncome: data.TotalIncome, Tax: tx.Tax, TaxRefund: responseRefund.TaxRefund}
 
@@ -648,17 +597,6 @@ func getTaxesCsv(file io.Reader) (Taxes, error) {
 			taxesSlice.Taxes = append(taxesSlice.Taxes, taxes)
 
 		}
-
-		// if responseRefund.TaxRefund != 0 {
-		// 	taxes = TaxesAll{TotalIncome: data.TotalIncome, TaxRefund: []TaxRefund{responseRefund}}
-
-		// 	taxesSlice.Taxes = append(taxesSlice.Taxes, taxes)
-		// } else {
-		// 	taxes = TaxesAll{TotalIncome: data.TotalIncome, Tax: []Tax{tx}}
-
-		// 	taxesSlice.Taxes = append(taxesSlice.Taxes, taxes)
-
-		// }
 
 	}
 	return taxesSlice, nil
