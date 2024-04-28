@@ -139,16 +139,16 @@ func getTaxHandler(c echo.Context) error {
 	donation, kReceipt = checkValue(incomeData)
 
 	// implement story: EXP04 and EXP07; provide the tax level detail
-	t := calculateTax(incomeData, donation, kReceipt)
+	_, response := calculateTax(incomeData, donation, kReceipt)
 	// if err != nil {
 	// 	return c.JSON(http.StatusBadRequest, Err{Message: err})
 	// }
 
 	// implement story: EXP01; not provide the tax level detail
-	tx := Tax{}
-	tx.Tax = t
+	// tx := Tax{}
+	// tx.Tax = t
 
-	return c.JSON(http.StatusCreated, tx)
+	return c.JSON(http.StatusCreated, response)
 }
 func checkNegativeNumber(data IncomeData) bool {
 	// check negative number
@@ -192,7 +192,7 @@ func checkValue(data IncomeData) (donation, kReceipt float64) {
 
 }
 
-func calculateTax(data IncomeData, donation, kReceipt float64) (tax float64) {
+func calculateTax(data IncomeData, donation, kReceipt float64) (tax float64, response TaxData) {
 
 	// for _, t := range data.Allowances {
 	// 	if t.AllowanceType == "donation" {
@@ -219,8 +219,11 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tax float64) {
 	txLevel := 0
 	if tax > 2000000 {
 		tax = tax - 2000000
+		// fmt.Println("tax after =", tax)
 		tax = 0.35 * tax
+		// fmt.Println("tax afer multiply =", tax)
 		tax = tax + (1000000 * 0.2) + (500000 * 0.15) + (350000 * 0.1)
+		// fmt.Println("tax after include =", tax)
 		txLevel = 4
 	} else if tax > 1000000 && tax <= 2000000 {
 		tax = tax - 1000000
@@ -240,7 +243,6 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tax float64) {
 		tax = 0
 		txLevel = 0
 	}
-
 	tax = tax - data.Wht
 	if tax < 0 {
 		tax = 0
@@ -251,36 +253,36 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tax float64) {
 	fmt.Println("tax level =", txLevel)
 	fmt.Println("<<<<<End of Request>>>>>")
 
-	// response := TaxData{
-	// 	Tax: tax,
-	// 	TaxLevel: []TaxLevel{
+	response = TaxData{
+		Tax: tax,
+		TaxLevel: []TaxLevel{
 
-	// 		{
-	// 			Level: "0-150,000",
-	// 			Tax:   0.0,
-	// 		},
-	// 		{
-	// 			Level: "150,001-500,000",
-	// 			Tax:   0.0,
-	// 		},
-	// 		{
-	// 			Level: "500,001-1,000,000",
-	// 			Tax:   0.0,
-	// 		},
-	// 		{
-	// 			Level: "1,000,001-2,000,000",
-	// 			Tax:   0.0,
-	// 		},
-	// 		{
-	// 			Level: "2,000,001 ขึ้นไป",
-	// 			Tax:   0.0,
-	// 		},
-	// 	},
-	// }
+			{
+				Level: "0-150,000",
+				Tax:   0.0,
+			},
+			{
+				Level: "150,001-500,000",
+				Tax:   0.0,
+			},
+			{
+				Level: "500,001-1,000,000",
+				Tax:   0.0,
+			},
+			{
+				Level: "1,000,001-2,000,000",
+				Tax:   0.0,
+			},
+			{
+				Level: "2,000,001 ขึ้นไป",
+				Tax:   0.0,
+			},
+		},
+	}
 
-	// response.TaxLevel[txLevel].Tax = tax
+	response.TaxLevel[txLevel].Tax = tax
 
-	return tax
+	return tax, response
 
 }
 
