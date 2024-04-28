@@ -40,6 +40,18 @@ type TaxData struct {
 	TaxLevel []TaxLevel `json:"taxLevel"`
 }
 
+type Amount struct {
+	Amount float64 `json:"amount"`
+}
+
+type PersonalDeduction struct {
+	PersonalDeduction float64 `json:"personalDeduction"`
+}
+
+type KReceipt struct {
+	KReceipt float64 `json:"kReceipt"`
+}
+
 var db *sql.DB
 
 type Err struct {
@@ -115,6 +127,8 @@ func main() {
 
 	e.GET("/health", healthHandler)
 	e.POST("/tax/calculations", getTaxHandler)
+	e.POST("/admin/deductions/personal", setPersonaldeductionHandler)
+	// e.POST("/admin/deductions/k-receipt", setKreceiptHandler)
 
 	// Start http server
 	port := os.Getenv("PORT")
@@ -292,5 +306,49 @@ func calculateTax(data IncomeData, donation, kReceipt float64) (tax float64, res
 // 		results = append(results, allowance.Amount)
 // 	}
 // 	return results
+
+// }
+
+func setPersonaldeductionHandler(c echo.Context) error {
+
+	var amount Amount
+	err := c.Bind(&amount)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+	}
+
+	if amount.Amount > 10000 && amount.Amount <= 100000 {
+
+		personalDeduction = amount.Amount
+
+		var personal PersonalDeduction
+		personal.PersonalDeduction = personalDeduction
+
+		return c.JSON(http.StatusCreated, personal)
+	} else {
+		return c.JSON(http.StatusBadRequest, "Personal deduction must be in range between 10,000 - 100,000")
+	}
+
+}
+
+// func setKreceiptHandler(c echo.Context) error {
+
+// 	var amount Amount
+// 	err := c.Bind(&amount)
+// 	if err != nil {
+// 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
+// 	}
+
+// 	if amount.Amount > 0 && amount.Amount <= 100000 {
+
+// 		kReceipt = amount.Amount
+
+// 		var receipt KReceipt
+// 		receipt.KReceipt = kReceipt
+
+// 		return c.JSON(http.StatusCreated, receipt)
+// 	} else {
+// 		return c.JSON(http.StatusBadRequest, "k-receipt must be in range between 0 - 100,000")
+// 	}
 
 // }
