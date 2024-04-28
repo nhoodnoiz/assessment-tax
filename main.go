@@ -30,7 +30,10 @@ func (cv *CustomValidator) Validate(i interface{}) error {
 
 func main() {
 
-	database.InitDB()
+	_, err := database.New()
+	if err != nil {
+		panic(err)
+	}
 
 	e := echo.New()
 	e.Validator = &CustomValidator{validator: validator.New()}

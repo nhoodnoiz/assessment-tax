@@ -135,7 +135,7 @@ func GetTaxHandler(c echo.Context) error {
 }
 
 func UploadCsvHandler(c echo.Context) error {
-	file, err := c.FormFile("taxesFile")
+	file, err := c.FormFile("taxFile")
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, Err{Message: err.Error()})
 	}

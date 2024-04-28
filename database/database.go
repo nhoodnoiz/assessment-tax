@@ -8,12 +8,14 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var db *sql.DB
+type Postgres struct {
+	Db *sql.DB
+}
 
-func InitDB() {
+func New() (*Postgres, error) {
 
 	// db connection
-	var err error
+	// var err error
 
 	// err = godotenv.Load()
 	// if err != nil {
@@ -22,15 +24,17 @@ func InitDB() {
 
 	psqlInfo := os.Getenv("DATABASE_URL")
 
-	db, err = sql.Open("postgres", psqlInfo)
+	db, err := sql.Open("postgres", psqlInfo)
 
 	if err != nil {
 		log.Fatal("Connect to database error ", err)
+		return nil, err
 	}
 	// defer db.Close()
 
-	// err = db.Ping()
-	// if err != nil {
-	// 	log.Fatal("cannot Ping ", err)
-	// }
+	err = db.Ping()
+	if err != nil {
+		log.Fatal("cannot Ping ", err)
+	}
+	return &Postgres{Db: db}, nil
 }
